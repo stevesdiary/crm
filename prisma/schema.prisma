@@ -1,0 +1,457 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                 String              @id @default(cuid())
+  name               String
+  plan               String
+  domain             String?
+  settings           Json?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  activities         Activity[]
+  auditLogs          AuditLog[]
+  communications     Communication[]
+  contacts           Contact[]
+  conversations      Conversation[]
+  documents          Document[]
+  fileShares         FileShare[]
+  integrations       Integration[]
+  leads              Lead[]
+  notifications      Notification[]
+  opportunities      Opportunity[]
+  pipelines          Pipeline[]
+  quotes             Quote[]
+  reminders          Reminder[]
+  roles              Role[]
+  slaPolicies        SlaPolicy[]
+  tasks              Task[]
+  tickets            Ticket[]
+  users              User[]
+  webhooks           Webhook[]
+  workflowExecutions WorkflowExecution[]
+  workflows          Workflow[]
+
+  @@map("tenants")
+}
+
+model User {
+  id                 String          @id @default(cuid())
+  tenantId           String
+  email              String          @unique
+  passwordHash       String
+  fullName           String
+  roleId             String?
+  lastLogin          DateTime?
+  prefs              Json?
+  createdAt          DateTime        @default(now())
+  activities         Activity[]
+  auditLogs          AuditLog[]
+  communications     Communication[]
+  createdContacts    Contact[]
+  documents          Document[]
+  fileShares         FileShare[]
+  notifications      Notification[]
+  ownedLeads         Lead[]
+  ownedOpportunities Opportunity[]
+  assignedTasks      Task[]
+  createdTasks       Task[]          @relation("TaskAssigner")
+  assignedTickets    Ticket[]
+  reminders          Reminder[]
+  role               Role?           @relation(fields: [roleId], references: [id])
+  tenant             Tenant          @relation(fields: [tenantId], references: [id])
+
+  @@map("users")
+}
+
+model Contact {
+  id            String          @id @default(cuid())
+  tenantId      String
+  firstName     String
+  lastName      String
+  company       String?
+  email         String?
+  phone         String?
+  address       String?
+  customFields  Json?
+  createdBy     String
+  createdAt     DateTime        @default(now())
+  communications Communication[]
+  creator       User            @relation(fields: [createdBy], references: [id])
+  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  leads         Lead[]
+  opportunities Opportunity[]
+  tickets       Ticket[]
+
+  @@map("contacts")
+}
+
+model Lead {
+  id        String   @id @default(cuid())
+  tenantId  String
+  contactId String?
+  source    String
+  status    String
+  score     Int?
+  ownerId   String
+  createdAt DateTime @default(now())
+  contact   Contact? @relation(fields: [contactId], references: [id])
+  owner     User     @relation(fields: [ownerId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("leads")
+}
+
+model Opportunity {
+  id                String    @id @default(cuid())
+  tenantId          String
+  name              String
+  amount            Decimal
+  currency          String    @default("USD")
+  stage             String
+  expectedCloseDate DateTime?
+  contactId         String
+  ownerId           String
+  createdAt         DateTime  @default(now())
+  contact           Contact   @relation(fields: [contactId], references: [id])
+  owner             User      @relation(fields: [ownerId], references: [id])
+  tenant            Tenant    @relation(fields: [tenantId], references: [id])
+  quotes            Quote[]
+
+  @@map("opportunities")
+}
+
+model Task {
+  id                String     @id @default(cuid())
+  tenantId          String
+  type              String
+  subject           String
+  status            String     @default("pending")
+  priority          String     @default("medium")
+  dueAt             DateTime?
+  assignedTo        String
+  assignedBy        String?
+  relatedEntityType String?
+  relatedEntityId   String?
+  notes             String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  assignee          User       @relation(fields: [assignedTo], references: [id])
+  assigner          User?      @relation("TaskAssigner", fields: [assignedBy], references: [id])
+  tenant            Tenant     @relation(fields: [tenantId], references: [id])
+  reminders         Reminder[]
+
+  @@map("tasks")
+}
+
+model Pipeline {
+  id       String @id @default(cuid())
+  tenantId String
+  name     String
+  stages   Json
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("pipelines")
+}
+
+model Quote {
+  id            String      @id @default(cuid())
+  tenantId      String
+  opportunityId String
+  items         Json
+  total         Decimal
+  status        String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id])
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+
+  @@map("quotes")
+}
+
+model Ticket {
+  id            String    @id @default(cuid())
+  tenantId      String
+  contactId     String
+  subject       String
+  description   String
+  status        String
+  priority      String
+  assignedTo    String?
+  slaBreached   Boolean   @default(false)
+  responseTime  Int?      // minutes
+  resolutionTime Int?     // minutes
+  firstResponseAt DateTime?
+  resolvedAt    DateTime?
+  dueAt         DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  assignee      User?     @relation(fields: [assignedTo], references: [id])
+  contact       Contact   @relation(fields: [contactId], references: [id])
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
+  slaPolicy     SlaPolicy @relation(fields: [priority], references: [priority])
+
+  @@map("tickets")
+}
+
+model Conversation {
+  id           String @id @default(cuid())
+  tenantId     String
+  channel      String
+  participants Json
+  messages     Json
+  tenant       Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("conversations")
+}
+
+model Permission {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  resource        String
+  action          String
+  description     String?
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model Role {
+  id              String           @id @default(cuid())
+  tenantId        String
+  name            String
+  description     String?
+  isSystem        Boolean          @default(false)
+  rolePermissions RolePermission[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  users           User[]
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Activity {
+  id                String   @id @default(cuid())
+  tenantId          String
+  type              String
+  subject           String
+  description       String?
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdBy         String
+  createdAt         DateTime @default(now())
+  creator           User     @relation(fields: [createdBy], references: [id])
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("activities")
+}
+
+model Workflow {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  trigger     Json
+  conditions  Json
+  actions     Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("workflows")
+}
+
+model WorkflowExecution {
+  id         String   @id @default(cuid())
+  tenantId   String
+  workflowId String
+  entityType String
+  entityId   String
+  status     String
+  result     Json?
+  error      String?
+  executedAt DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("workflow_executions")
+}
+
+model Reminder {
+  id       String   @id @default(cuid())
+  tenantId String
+  taskId   String
+  userId   String
+  type     String   @default("email")
+  time     DateTime
+  sent     Boolean  @default(false)
+  createdAt DateTime @default(now())
+  task     Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("reminders")
+}
+
+model SlaPolicy {
+  id                String   @id @default(cuid())
+  tenantId          String
+  priority          String   @unique
+  responseTime      Int      // minutes
+  resolutionTime    Int      // minutes
+  businessHoursOnly Boolean  @default(false)
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  tickets           Ticket[]
+
+  @@map("sla_policies")
+}
+
+model Communication {
+  id        String   @id @default(cuid())
+  tenantId  String
+  contactId String
+  userId    String
+  type      String   // email, sms, call
+  direction String   // inbound, outbound
+  subject   String?
+  content   String?
+  duration  Int?     // for calls, in seconds
+  status    String   @default("completed")
+  metadata  Json?    // provider-specific data
+  createdAt DateTime @default(now())
+  contact   Contact  @relation(fields: [contactId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("communications")
+}
+
+model Document {
+  id            String      @id @default(cuid())
+  tenantId      String
+  filename      String
+  originalName  String
+  mimeType      String
+  size          Int
+  storageKey    String      // B2 file key
+  version       Int         @default(1)
+  parentId      String?     // For versioning
+  entityType    String?     // contact, lead, opportunity, etc.
+  entityId      String?
+  uploadedBy    String
+  createdAt     DateTime    @default(now())
+  parent        Document?   @relation("DocumentVersions", fields: [parentId], references: [id])
+  versions      Document[]  @relation("DocumentVersions")
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  uploader      User        @relation(fields: [uploadedBy], references: [id])
+  shares        FileShare[]
+
+  @@map("documents")
+}
+
+model FileShare {
+  id          String   @id @default(cuid())
+  documentId  String
+  tenantId    String
+  token       String   @unique
+  expiresAt   DateTime
+  isActive    Boolean  @default(true)
+  accessCount Int      @default(0)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  creator     User     @relation(fields: [createdBy], references: [id])
+
+  @@map("file_shares")
+}
+
+model Webhook {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  url         String
+  events      String[] // Array of event types
+  secret      String?
+  isActive    Boolean  @default(true)
+  lastTriggered DateTime?
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  deliveries  WebhookDelivery[]
+
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id          String   @id @default(cuid())
+  webhookId   String
+  event       String
+  payload     Json
+  response    Json?
+  status      String   // pending, success, failed
+  attempts    Int      @default(0)
+  deliveredAt DateTime @default(now())
+  webhook     Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@map("webhook_deliveries")
+}
+
+model Integration {
+  id          String   @id @default(cuid())
+  tenantId    String
+  provider    String   // gmail, outlook, calendar, etc.
+  name        String
+  config      Json     // Provider-specific configuration
+  credentials Json     // Encrypted credentials
+  isActive    Boolean  @default(true)
+  lastSync    DateTime?
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("integrations")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  actorId   String
+  action    String
+  target    String
+  details   Json?
+  timestamp DateTime @default(now())
+  actor     User     @relation(fields: [actorId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  type      String   // info, success, warning, error
+  title     String
+  message   String
+  data      String?  // JSON string
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
